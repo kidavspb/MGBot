@@ -1,5 +1,6 @@
 import telebot
 import datetime
+import time
 from docx import Document
 import subprocess
 from pdf2image import convert_from_path
@@ -12,20 +13,25 @@ from secret_file import *
 
 logging.basicConfig(
     level=logging.INFO,
-    # filename = "mylog.log",
-    format="%(asctime)s - %(module)s - %(levelname)s - %(funcName)s: %(lineno)d - %(message)s",
+    #    filename = "MGlog.log",
+    format="%(asctime)s - %(module)s - %(levelname)s - %(funcName)s: %(lineno)d - %(message)s, user: %(user)s",
+    handlers=[
+        logging.FileHandler("MGlog.log"),
+        logging.StreamHandler()
+    ],
     datefmt='%H:%M:%S',
 )
 
 while True:
     try:
-        logging.info("Bot running..")
+        logging.info("Bot running..", extra={"user": 0})
         months = ["января", "февраля",
                   "марта", "апреля", "мая",
                   "июня", "июля", "августа",
                   "сентября", "октября", "ноября",
                   "декабря"]
         bot = telebot.TeleBot(TOKEN)
+
 
         @bot.message_handler(commands=['start'])
         def welcome_message(message):
@@ -105,14 +111,15 @@ while True:
                 bot.send_message(message.chat.id,
                                  "Спасибо! Справка отправлена на согласование, нужно немного подождать")
 
-                logging.info("Send request", extra={"user": message.from_user.username, isDigital: isDigital})
+                logging.info("Send request", extra={"user": message.from_user.username})
                 user_username = "@" + message.from_user.username
                 user_name = message.from_user.first_name + " " + message.from_user.last_name
                 info_text = f"📨 Заявка на справку от {user_username} ({user_name})"
                 user_message = f"<b>Тип:</b> {'электронная' if isDigital else 'бумажная'}\n\n<b>ФИО:</b> {full_name}\n\n<b>Причина:</b> {reason}\n\n<b>Дата:</b> {date} "
 
                 # Send message to bot administrator
-                bot.send_message(ADMIN_CHAT_ID, f"{message.chat.id}\n\n{info_text}\n\n{user_message}",
+                bot.send_message(ADMIN_CHAT_ID,
+                                 f"{message.chat.id} {int(time.time())}\n\n{info_text}\n\n{user_message}",
                                  parse_mode='HTML', reply_markup=create_response_markup_approval())
 
 
@@ -137,13 +144,15 @@ while True:
             elif call.data == "Reject":
                 bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                                       text=call.message.text + "\n\n❌ Отклонено")
-                bot.send_message(call.message.text.split('\n')[0], "К сожалению, справка не была согласована 🤷‍")
-                logging.info("Reject request", extra={"userId": call.message.text.split('\n')[0]})
+                bot.send_message(call.message.text.split('\n')[0].split(' ')[0],
+                                 "К сожалению, справка не была согласована 🤷‍")
+                logging.info("Reject request", extra={"user": call.message.text.split('\n')[0].split(' ')[0]})
             elif call.data == "Approve":
+                # bot.send_message(CHANNEL_ID, call.message.text)
                 bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                                       text=call.message.text + "\n\n✅ Одобрено")
-                bot.send_message(call.message.text.split('\n')[0], "Ура, справка согласована 🎉")
-                logging.info("Approve request", extra={"userId": call.message.text.split('\n')[0]})
+                bot.send_message(call.message.text.split('\n')[0].split(' ')[0], "Ура, справка согласована 🎉")
+                logging.info("Approve request", extra={"user": call.message.text.split('\n')[0].split(' ')[0]})
 
                 full_name = (call.message.text.split('ФИО: '))[1].split('\n')[0]
                 reason = (call.message.text.split('Причина: '))[1].split('\n')[0]
@@ -160,10 +169,8 @@ while True:
 
                     today = datetime.date.today().strftime("%d.%m.%Y")
                     # Modify the document
-                    document.paragraphs[
-                        3].text = f"От «{today.split('.')[0]}» {months[int(today.split('.')[1]) - 1]} {today.split('.')[2]} г."
-                    document.paragraphs[10].text = document.paragraphs[10].text.replace('Иванов Иван Иванович',
-                                                                                        full_name)
+                    document.paragraphs[3].text = f"От «{today.split('.')[0]}» {months[int(today.split('.')[1]) - 1]} {today.split('.')[2]} г."
+                    document.paragraphs[10].text = document.paragraphs[10].text.replace('Иванов Иван Иванович',  full_name)
                     document.paragraphs[10].text = document.paragraphs[10].text.replace('1 декабря 2022 года', date)
                     document.paragraphs[10].text = document.paragraphs[10].text.replace('приминает участие в', reason)
 
@@ -198,9 +205,23 @@ while True:
 
                     # Send modified file to the user
                     with open(result_filename, "rb") as f:
-                        bot.send_document(call.message.text.split('\n')[0], f)
+                        seconds = int(time.time() - int(call.message.text.split('\n')[0].split(' ')[1]))
+                        h = seconds // 3600
+                        m = seconds % 3600 // 60
+                        s = seconds % 3600 % 60
+                        if h > 0:
+                            preparation_time = '{} ч. {} мин. {} сек.'.format(h, m, s)
+                        elif m > 0:
+                            preparation_time = '{} мин. {} сек.'.format(m, s)
+                        elif s > 0:
+                            preparation_time = '{} сек.'.format(s)
+
+                        # time.sleep(10) # wait for the file to be saved
+
+                        id_to_user = bot.send_document(CHANNEL_ID, f, caption=f"Сделано за {preparation_time}").document.file_id
+                        bot.send_document(call.message.text.split('\n')[0].split(' ')[0], id_to_user)
                         logging.info("Send to user",
-                                     extra={"userId": call.message.text.split('\n')[0], isDigital: True})
+                                     extra={"user": call.message.text.split('\n')[0].split(' ')[0]})
                 else:
                     bot.send_message(call.message.text.split('\n')[0],
                                      "Уже печатаем справку. Сообщим, как только она будет готова 👌")
@@ -208,8 +229,8 @@ while True:
                     result_filename = "edited_file.pdf"
                     with open(result_filename, "rb") as f:
                         bot.send_document(PRINTER_CHAT_ID, f,
-                                          caption=call.message.text.split('\n')[
-                                                      0] + f"\n\nПечать справки для {full_name}",
+                                          caption=call.message.text.split('\n')[0]
+                                                  + f"\n\nПечать справки для {full_name}",
                                           reply_markup=telebot.types.InlineKeyboardMarkup().add(
                                               telebot.types.InlineKeyboardButton("🖨️ Напечатано",
                                                                                  callback_data="Printed")))
@@ -222,19 +243,19 @@ while True:
                                          caption=call.message.caption + "\n\n🖨️ Напечатано")
                 bot.send_message(call.message.caption.split('\n')[0], f"Cправка для " +
                                  (call.message.caption.split('Печать справки для '))[1].split('\n')[0] +
-                                 " готова, можно забирать в 19 кабинете")
-                logging.info("Send to user", extra={"userId": call.message.caption.split('\n')[0], isDigital: False})
+                                 " готова, можно забирать в " + PLACE)
+                logging.info("Send to user", extra={"user": call.message.caption.split('\n')[0]})
 
 
-        logging.info("Bot running..")
+        logging.info("Bot running..", extra={"user": 0})
         bot.polling(none_stop=True)
 
     except Exception as e:
-        logging.error(e)
+        logging.error(e, extra={"user": 0})
         bot.stop_polling()
 
         time.sleep(15)
 
-        logging.info("Running again!")
+        logging.info("Running again!", extra={"user": 0})
 
 # bot.polling()
