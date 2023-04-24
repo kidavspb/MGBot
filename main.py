@@ -160,7 +160,7 @@ while True:
                 bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                                       text=call.message.text + "\n\n✅ Одобрено")
                 bot.send_message(id_of_user, "Ура, справка согласована 🎉")
-                logging.info("Approve request", extra={"user": id_of_user})
+                logging.info("Approve request", extra={"user": bot.get_chat(id_of_user).username})
 
                 full_name = (call.message.text.split('ФИО: '))[1].split('\n')[0]
                 reason = (call.message.text.split('Причина: '))[1].split('\n')[0]
@@ -230,7 +230,7 @@ while True:
 
                         # id_of_file = bot.send_document(CHANNEL_ID, f, caption=f"Сделано за {preparation_time}").document.file_id
                         bot.send_document(id_of_user, f)
-                        logging.info("Send to user", extra={"user": id_of_user})
+                        logging.info("Send to user", extra={"user": bot.get_chat(id_of_user).username})
 
                         bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
                                               text="📨" + call.message.text.split('📨')[1] + f"\n\n✅ Сделано ({preparation_time})")
