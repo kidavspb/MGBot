@@ -116,11 +116,11 @@ while True:
                                  f"{message.chat.id} {int(time.time())} {id_of_message_in_channel}\n\n"
                                  f"{info_text}\n\n{user_message}",
                                  parse_mode='HTML', reply_markup=create_response_markup_approval())
-                logging.info(f"Send request from user @{message.from_user.username}")
+                logging.info(f"Received {'digital' if isDigital else 'paper'} request from user @{message.from_user.username}")
 
                 bot.send_message(message.chat.id,
                                  f"Спасибо! Справка отправлена на согласование, нужно немного подождать "
-                                 f"(примерно {beautiful_time(count_average_time(isDigital)).split('. ')[0]}.)")
+                                 f"(примерно {beautiful_time(count_average_time(isDigital)*1.5).split('. ')[0]}.)")
 
 
         def create_response_markup_approval():
@@ -152,8 +152,10 @@ while True:
                 bot.send_message(id_of_user, "К сожалению, справка не была согласована 🤷‍")
                 logging.info(f"Reject request from user @{bot.get_chat(id_of_user).username}")
 
-                bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
                 count_average_time(isDigital, int(time.time() - start_time))
+                bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
+                                      text=call.message.text.split("\n\n", 1)[1] + "\n\n❌ Отклонено")
+                bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
 
             elif call.data == "Approve":
                 id_of_user = call.message.text.split('\n')[0].split(' ')[0]
@@ -187,20 +189,25 @@ while True:
                     # Send modified file to the user
                     with open(result_filename, "rb") as f:
                         bot.send_document(id_of_user, f)
-                        logging.info(f"Send to user @{bot.get_chat(id_of_user).username}")
+                        logging.info(f"Send digital file to user @{bot.get_chat(id_of_user).username}")
 
-                    bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
                     count_average_time(isDigital, int(time.time() - start_time))
+                    bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
+                                          text=call.message.text.split("\n\n", 1)[1] + "\n\n✅ Выполнено")
+                    bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
                 else:
                     bot.send_message(id_of_user, "Уже печатаем справку. Сообщим, как только она будет готова 👌")
                     result_filename = "НА ПЕЧАТЬ - " + full_name + ".pdf"
                     os.rename("edited_file.pdf", result_filename)
                     with open(result_filename, "rb") as f:
                         bot.send_document(PRINTER_CHAT_ID, f,
-                                          caption=id_of_user + " " + str(start_time) + " " + id_of_message_in_channel
-                                                  + f"\n\nПечать справки для {full_name}",
+                                          caption=call.message.text,
                                           reply_markup=telebot.types.InlineKeyboardMarkup().add(
                                               telebot.types.InlineKeyboardButton("🖨️ Напечатано", callback_data="Printed")))
+                        logging.info(f"Send file to printer")
+
+                    bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
+                                          text=call.message.text.split("\n\n", 1)[1] + "\n\n🧑‍💻 Согласовано, но пока не напечатано")
 
                 # Сlean up after ourselves
                 os.remove(result_filename)
@@ -213,12 +220,14 @@ while True:
                 bot.edit_message_caption(chat_id=call.message.chat.id, message_id=call.message.message_id,
                                          caption=call.message.caption + "\n\n🖨️ Напечатано")
                 bot.send_message(id_of_user,
-                                 "Cправка для " + (call.message.caption.split('Печать справки для '))[1].split('\n')[0]
+                                 "Cправка для " + (call.message.caption.split('ФИО: '))[1].split('\n')[0]
                                  + " готова, можно забирать в " + PLACE)
-                logging.info("Send to user @" + bot.get_chat(id_of_user).username)
+                logging.info("Send notification to user @" + bot.get_chat(id_of_user).username)
 
-                bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
                 count_average_time(False, int(time.time() - start_time))
+                bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
+                                      text=call.message.caption.split("\n\n", 1)[1] + "\n\n✅ Выполнено")
+                bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
 
 
         logging.info("Bot running...")

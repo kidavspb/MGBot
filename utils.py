@@ -64,6 +64,7 @@ def count_average_time(isDigital, current_time=0):
 
 
 def beautiful_time(seconds):
+    seconds = int(seconds)
     h = seconds // 3600
     m = seconds % 3600 // 60
     s = seconds % 3600 % 60
