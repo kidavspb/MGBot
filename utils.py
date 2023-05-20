@@ -68,11 +68,16 @@ def beautiful_time(seconds):
     h = seconds // 3600
     m = seconds % 3600 // 60
     s = seconds % 3600 % 60
+
+    preparation_time = ''
+
     if h > 0:
-        preparation_time = '{} ч. {} мин. {} сек.'.format(h, m, s)
-    elif m > 0:
-        preparation_time = '{} мин. {} сек.'.format(m, s)
-    elif s > 0:
-        preparation_time = '{} сек.'.format(s)
+        preparation_time = f'{h} ч.'
+    if m > 0:
+        if preparation_time: preparation_time += ' '
+        preparation_time += f'{m} мин.'
+    if s > 0:
+        if preparation_time: preparation_time += ' '
+        preparation_time += f'{s} сек.'
 
     return preparation_time

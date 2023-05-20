@@ -61,9 +61,12 @@ while True:
             try:
                 if len(message.text) <= start_length:
                     raise Exception("подозрительно короткая причина")
+                if "\n" in message.text:
+                    raise Exception("в причине не должно быть переносов строк")
                 reason = message.text[0].lower() + message.text[1:]
                 if reason[:start_length] != "принимает участие в":
                     raise Exception("причина должна начинаться со слов «принимает участие в ...»")
+                reason = reason.strip(".")
 
             except Exception as e:
                 bot.send_message(message.chat.id, f"Не подходит: {e}. Попробуйте еще раз")
