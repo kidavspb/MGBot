@@ -65,14 +65,18 @@ def count_average_time(isDigital, current_time=0):
 
 def beautiful_time(seconds):
     seconds = int(seconds)
-    h = seconds // 3600
+    d = seconds // (3600 * 24)
+    h = seconds % (3600 * 24) // 3600
     m = seconds % 3600 // 60
-    s = seconds % 3600 % 60
+    s = seconds % 60
 
     preparation_time = ''
 
+    if d > 0:
+        preparation_time = f'{d} д.'
     if h > 0:
-        preparation_time = f'{h} ч.'
+        if preparation_time: preparation_time += ' '
+        preparation_time += f'{h} ч.'
     if m > 0:
         if preparation_time: preparation_time += ' '
         preparation_time += f'{m} мин.'
