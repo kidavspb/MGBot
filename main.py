@@ -9,10 +9,9 @@ from secret_file import *
 
 logging.basicConfig(
     level=logging.INFO,
-    #    filename = "MGlog.log",
     format="%(asctime)s - %(module)s - %(levelname)s: %(lineno)d - %(message)s",
     handlers=[
-        logging.FileHandler("MGlog.log"),
+        logging.FileHandler("MG.log"),
         logging.StreamHandler()
     ],
     datefmt='%d/%b %H:%M:%S',
@@ -109,7 +108,7 @@ while True:
                 date = f"{day} {month} {year} года"
 
                 user_username = "@" + message.from_user.username
-                user_name = message.from_user.first_name + " " + message.from_user.last_name
+                user_name = message.from_user.full_name
                 info_text = f"📨 Заявка на справку от {user_username} ({user_name})"
                 user_message = f"<b>Тип:</b> {'электронная' if isDigital else 'бумажная'}\n\n<b>ФИО:</b> {full_name}\n\n<b>Причина:</b> {reason}\n\n<b>Дата:</b> {date} "
 
