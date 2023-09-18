@@ -41,6 +41,7 @@ while True:
         def get_full_name(message, isDigital):
             if message.text == "/cancel":
                 logging.info(f"Cancel message from user @{message.from_user.username}")
+                telebot.types.ReplyKeyboardRemove()
                 bot.send_message(message.chat.id, "Отменено")
                 return
 
@@ -53,6 +54,7 @@ while True:
         def get_reason(message, full_name, isDigital):
             if message.text == "/cancel":
                 logging.info(f"Cancel message from user @{message.from_user.username}")
+                telebot.types.ReplyKeyboardRemove()
                 bot.send_message(message.chat.id, "Отменено")
                 return
 
@@ -79,6 +81,7 @@ while True:
         def get_date(message, full_name, reason, isDigital):
             if message.text == "/cancel":
                 logging.info(f"Cancel message from user @{message.from_user.username}")
+                telebot.types.ReplyKeyboardRemove()
                 bot.send_message(message.chat.id, "Отменено")
                 return
 
@@ -131,6 +134,41 @@ while True:
                        telebot.types.InlineKeyboardButton("❌ Отклонить", callback_data="Reject"))
             return markup
 
+        def rejection(message, system_message, request_message):
+            if message.text == "/cancel":
+                logging.info(f"Cancel message from user @{message.from_user.username}")
+                bot.send_message(message.chat.id, "Отменено", reply_markup=telebot.types.ReplyKeyboardRemove())
+                return
+            elif message.text == "↩️ Отменить":
+                bot.delete_message(chat_id=system_message.chat.id, message_id=system_message.message_id)
+                bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                return
+            elif message.text == "⏩ Пропустить":
+                rejection_reason = ""
+            else:
+                rejection_reason = message.text
+
+            id_of_user = request_message.text.split('\n')[0].split(' ')[0]
+            start_time = int(request_message.text.split('\n')[0].split(' ')[1])
+            id_of_message_in_channel = request_message.text.split('\n')[0].split(' ')[2]
+            isDigital = True if (request_message.text.split('Тип: '))[1].split('\n')[0] == "электронная" else False
+
+            appendix = "\n\n❌ Отклонено"
+            if rejection_reason:
+                appendix += f" ({rejection_reason})"
+
+            bot.edit_message_text(chat_id=request_message.chat.id, message_id=request_message.message_id, text=request_message.text + appendix)
+            bot.send_message(message.chat.id, "Заявка отклонена" + (f" ({rejection_reason})" if rejection_reason else ""),
+                             reply_to_message_id=request_message.message_id, reply_markup=telebot.types.ReplyKeyboardRemove())
+
+            bot.send_message(id_of_user, "К сожалению, справка не была согласована " + ("🤷‍" if not rejection_reason else f"({rejection_reason})"))
+            logging.info(f"Reject request from user @{bot.get_chat(id_of_user).username}")
+
+            count_average_time(isDigital, int(time.time() - start_time))
+            bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
+                                  text=request_message.text.split("\n\n", 1)[1] + appendix)
+            bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
+
 
         @bot.callback_query_handler(func=lambda call: True)
         def callback(call):
@@ -144,20 +182,13 @@ while True:
                 bot.register_next_step_handler(call.message, get_full_name, isDigital=False)
 
             elif call.data == "Reject":
-                id_of_user = call.message.text.split('\n')[0].split(' ')[0]
-                start_time = int(call.message.text.split('\n')[0].split(' ')[1])
-                id_of_message_in_channel = call.message.text.split('\n')[0].split(' ')[2]
-                isDigital = True if (call.message.text.split('Тип: '))[1].split('\n')[0] == "электронная" else False
+                reject_menu = telebot.types.ReplyKeyboardMarkup(True, True)
+                btn1 = telebot.types.KeyboardButton("↩️ Отменить")
+                btn2 = telebot.types.KeyboardButton("⏩ Пропустить")
+                reject_menu.add(btn1, btn2)
 
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
-                                      text=call.message.text + "\n\n❌ Отклонено")
-                bot.send_message(id_of_user, "К сожалению, справка не была согласована 🤷‍")
-                logging.info(f"Reject request from user @{bot.get_chat(id_of_user).username}")
-
-                count_average_time(isDigital, int(time.time() - start_time))
-                bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
-                                      text=call.message.text.split("\n\n", 1)[1] + "\n\n❌ Отклонено")
-                bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
+                system_message = bot.send_message(call.message.chat.id,  "Пожалуйста, введите причину отклонения", reply_markup=reject_menu)
+                bot.register_next_step_handler(call.message, rejection, system_message, request_message=call.message)
 
             elif call.data == "Approve":
                 id_of_user = call.message.text.split('\n')[0].split(' ')[0]
