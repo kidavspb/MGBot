@@ -1,9 +1,8 @@
-import json
-
 import telebot
 from pdf2image import convert_from_path
 from PIL import Image
 import logging
+import json
 import time
 import os
 from utils import *
@@ -109,8 +108,7 @@ while True:
             except Exception as e:
                 bot.send_message(message.chat.id, f"Что-то не то с датой, попробуйте еще раз\n\n<code>{e}</code>",
                                  parse_mode='HTML')
-                bot.register_next_step_handler(message, get_date, full_name=full_name, reason=reason,
-                                               isDigital=isDigital)
+                bot.register_next_step_handler(message, get_date, full_name=full_name, reason=reason, isDigital=isDigital)
             else:
                 date = f"{day} {month} {year} года"
                 make_request(message, full_name, reason, date, isDigital)
@@ -164,26 +162,28 @@ while True:
             else:
                 rejection_reason = message.text
 
-            id_of_user = request_message.text.split('\n')[0].split(' ')[0]
+            user_id = request_message.text.split('\n')[0].split(' ')[0]
             start_time = int(request_message.text.split('\n')[0].split(' ')[1])
             id_of_message_in_channel = request_message.text.split('\n')[0].split(' ')[2]
             isDigital = True if (request_message.text.split('Тип: '))[1].split('\n')[0] == "электронная" else False
+            FIO = (request_message.text.split('ФИО: '))[1].split('\n')[0]
 
             appendix = "\n\n❌ Отклонено"
             if rejection_reason:
                 appendix += f" ({rejection_reason})"
 
-            bot.edit_message_text(chat_id=request_message.chat.id, message_id=request_message.message_id,
+            bot.edit_message_text(chat_id=request_message.chat.id,
+                                  message_id=request_message.message_id,
                                   text=request_message.text + appendix)
             bot.send_message(message.chat.id,
                              "Заявка отклонена" + (f" ({rejection_reason})" if rejection_reason else ""),
                              reply_to_message_id=request_message.message_id,
                              reply_markup=telebot.types.ReplyKeyboardRemove())
 
-            bot.send_message(id_of_user, "К сожалению, справка не была согласована " + (
-                "🤷‍" if not rejection_reason else f"({rejection_reason})"))
-            logging.info(f"Reject request from user @{bot.get_chat(id_of_user).username}"
-                         + (" with reason " + rejection_reason if rejection_reason else ""))
+            bot.send_message(user_id, f"К сожалению, справка для {FIO} не была согласована "
+                             + ("🤷‍" if not rejection_reason else f"({rejection_reason})"))
+            logging.info(f"Reject request from user @{bot.get_chat(user_id).username}"
+                         + (f' with reason "{rejection_reason}"' if rejection_reason else " without reason"))
 
             count_average_time(isDigital, int(time.time() - start_time))
             bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
@@ -212,8 +212,7 @@ while True:
                 btn2 = telebot.types.KeyboardButton("⏩ Пропустить")
                 reject_menu.add(btn1, btn2)
 
-                system_message = bot.send_message(call.message.chat.id, "Пожалуйста, введите причину отклонения",
-                                                  reply_markup=reject_menu)
+                system_message = bot.send_message(call.message.chat.id, "Пожалуйста, введите причину отклонения", reply_markup=reject_menu)
                 bot.register_next_step_handler(call.message, rejection, system_message, request_message=call.message)
 
             elif call.data == "Approve":
@@ -227,7 +226,6 @@ while True:
                                       text=call.message.text + "\n\n✅ Одобрено")
                 bot.send_message(user_id, "Ура, справка согласована 🎉")
                 logging.info(f"Approve request from user @{user_username}")
-                bot.send_chat_action(user_id, "upload_document")
 
                 str_user_id = str(user_id)
                 with open('users.json', 'r') as fr:
@@ -251,6 +249,8 @@ while True:
                 create_PDF_certificate(full_name, reason, date, isDigital)
 
                 if isDigital:
+                    bot.send_chat_action(user_id, "upload_document")
+
                     # Convert .pdf to .png
                     pages = convert_from_path('edited_file.pdf', 500)
                     pages[0].save('edited_file.png', 'PNG')
@@ -283,8 +283,7 @@ while True:
                         logging.info(f"Send file to printer")
 
                     bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
-                                          text=call.message.text.split("\n\n", 1)[
-                                                   1] + "\n\n🧑‍💻 Согласовано, но пока не напечатано")
+                                          text=call.message.text.split("\n\n", 1)[1] + "\n\n🧑‍💻 Согласовано, но пока не напечатано")
 
                 # Сlean up after ourselves
                 os.remove(result_filename)
