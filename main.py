@@ -1,28 +1,14 @@
-import telebot
 from pdf2image import convert_from_path
 from PIL import Image
-import logging
-import json
 import time
 import os
-from utils import *
-from secret_file import *
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(module)s - %(levelname)s: %(lineno)d - %(message)s",
-    handlers=[
-        logging.FileHandler(logfile_name),
-        logging.StreamHandler()
-    ],
-    datefmt='%d/%b %H:%M:%S',
-)
-
-bot = telebot.TeleBot(TOKEN)
+from code_modules.utils import *
+from code_modules.auth import *
 
 while True:
     try:
         @bot.message_handler(commands=['start'])
+        @check_message
         def welcome_message(message):
             logging.info(f"Start message from user @{message.from_user.username}")
             bot.send_message(message.chat.id, "Здравствуйте! Пожалуйста, выберите тип справки:\n\n"
@@ -39,24 +25,16 @@ while True:
             return markup
 
 
+        @check_message
         def get_full_name(message, isDigital):
-            if message.text == "/cancel":
-                logging.info(f"Cancel message from user @{message.from_user.username}")
-                bot.send_message(message.chat.id, "Отменено", reply_markup=telebot.types.ReplyKeyboardRemove())
-                return
-
             full_name = message.text
             bot.send_message(message.chat.id,
                              "Хорошо! Теперь, пожалуйста, введите причину для справки в формате «принимает участие в ...»")
             bot.register_next_step_handler(message, get_reason, full_name=full_name, isDigital=isDigital)
 
 
+        @check_message
         def get_reason(message, full_name, isDigital):
-            if message.text == "/cancel":
-                logging.info(f"Cancel message from user @{message.from_user.username}")
-                bot.send_message(message.chat.id, "Отменено", reply_markup=telebot.types.ReplyKeyboardRemove())
-                return
-
             start_length = len("принимает участие в")
             try:
                 if len(message.text) <= start_length:
@@ -77,12 +55,8 @@ while True:
                                                isDigital=isDigital)
 
 
+        @check_message
         def get_date(message, full_name, reason, isDigital):
-            if message.text == "/cancel":
-                logging.info(f"Cancel message from user @{message.from_user.username}")
-                bot.send_message(message.chat.id, "Отменено", reply_markup=telebot.types.ReplyKeyboardRemove())
-                return
-
             words = "".join(c for c in message.text.replace(".", " ") if
                             c.isalnum() or c == " ").strip().split()  # список слов, которые были в исходной строке, но без знаков препинания и точек
             year = current_year = int(datetime.date.today().strftime("%Y"))
@@ -108,7 +82,8 @@ while True:
             except Exception as e:
                 bot.send_message(message.chat.id, f"Что-то не то с датой, попробуйте еще раз\n\n<code>{e}</code>",
                                  parse_mode='HTML')
-                bot.register_next_step_handler(message, get_date, full_name=full_name, reason=reason, isDigital=isDigital)
+                bot.register_next_step_handler(message, get_date, full_name=full_name, reason=reason,
+                                               isDigital=isDigital)
             else:
                 date = f"{day} {month} {year} года"
                 make_request(message, full_name, reason, date, isDigital)
@@ -120,10 +95,9 @@ while True:
             user_id = message.chat.id
             info_text = f"📨 Заявка на справку от {user_username} ({user_name})"
 
-            with open("users.json", "r") as fr:
-                users = json.load(fr)
-                if not users.get(str(user_id)):
-                    info_text += "\n⚠️ Раньше не заказывал"
+            if (int(users_manager.get_data()[user_id]["counter"]["digital"]["approved"]) +
+                    int(users_manager.get_data()[user_id]["counter"]["paper"]["approved"]) == 0):
+                info_text += "\n⚠️ Еще не была одобрена ни одна справка"
 
             user_message = f"<b>Тип:</b> {'электронная' if isDigital else 'бумажная'}\n\n<b>ФИО:</b> {full_name}\n\n<b>Причина:</b> {reason}\n\n<b>Дата:</b> {date} "
 
@@ -138,7 +112,7 @@ while True:
 
             bot.send_message(user_id,
                              f"Спасибо! Справка отправлена на согласование, нужно немного подождать "
-                             f"(примерно {beautiful_time(count_average_time(isDigital) * 1.5).split('. ')[0]}.)")
+                             f"(примерно {beautiful_time(count_average_time(isDigital) * 1.5).split('. ')[0].strip('.')}.)")
 
 
         def create_response_markup_approval():
@@ -148,12 +122,9 @@ while True:
             return markup
 
 
+        @check_message
         def rejection(message, system_message, request_message):
-            if message.text == "/cancel":
-                logging.info(f"Cancel message from user @{message.from_user.username}")
-                bot.send_message(message.chat.id, "Отменено", reply_markup=telebot.types.ReplyKeyboardRemove())
-                return
-            elif message.text == "↩️ Отменить":
+            if message.text == "↩️ Отменить":
                 bot.delete_message(chat_id=system_message.chat.id, message_id=system_message.message_id)
                 bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
                 return
@@ -162,7 +133,7 @@ while True:
             else:
                 rejection_reason = message.text
 
-            user_id = request_message.text.split('\n')[0].split(' ')[0]
+            user_id = int(request_message.text.split('\n')[0].split(' ')[0])
             start_time = int(request_message.text.split('\n')[0].split(' ')[1])
             id_of_message_in_channel = request_message.text.split('\n')[0].split(' ')[2]
             isDigital = True if (request_message.text.split('Тип: '))[1].split('\n')[0] == "электронная" else False
@@ -186,6 +157,7 @@ while True:
                          + (f' with reason "{rejection_reason}"' if rejection_reason else " without reason"))
 
             count_average_time(isDigital, int(time.time() - start_time))
+            users_manager.increment(user_id, "digital" if isDigital else "paper", "rejected")
             bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
                                   text=request_message.text.split("\n\n", 1)[1] + appendix)
             bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
@@ -212,11 +184,12 @@ while True:
                 btn2 = telebot.types.KeyboardButton("⏩ Пропустить")
                 reject_menu.add(btn1, btn2)
 
-                system_message = bot.send_message(call.message.chat.id, "Пожалуйста, введите причину отклонения", reply_markup=reject_menu)
+                system_message = bot.send_message(call.message.chat.id, "Пожалуйста, введите причину отклонения",
+                                                  reply_markup=reject_menu)
                 bot.register_next_step_handler(call.message, rejection, system_message, request_message=call.message)
 
             elif call.data == "Approve":
-                user_id = call.message.text.split('\n')[0].split(' ')[0]
+                user_id = int(call.message.text.split('\n')[0].split(' ')[0])
                 user_username = bot.get_chat(user_id).username
 
                 start_time = int(call.message.text.split('\n')[0].split(' ')[1])
@@ -226,19 +199,6 @@ while True:
                                       text=call.message.text + "\n\n✅ Одобрено")
                 bot.send_message(user_id, "Ура, справка согласована 🎉")
                 logging.info(f"Approve request from user @{user_username}")
-
-                str_user_id = str(user_id)
-                with open('users.json', 'r') as fr:
-                    users = json.load(fr)
-
-                    if users.get(str_user_id):
-                        # users[str_user_id]["username"] = user_username
-                        users[str_user_id]["counter"] += 1
-                    else:
-                        users[str_user_id] = {"username": user_username, "counter": 1}
-
-                    with open('users.json', 'w') as fw:
-                        fw.write(json.dumps(users, indent=2))
 
                 full_name = (call.message.text.split('ФИО: '))[1].split('\n')[0]
                 reason = (call.message.text.split('Причина: '))[1].split('\n')[0]
@@ -252,29 +212,30 @@ while True:
                     bot.send_chat_action(user_id, "upload_document")
 
                     # Convert .pdf to .png
-                    pages = convert_from_path('edited_file.pdf', 500)
-                    pages[0].save('edited_file.png', 'PNG')
+                    pages = convert_from_path(path_to_docs_file + 'edited_file.pdf', 500)
+                    pages[0].save(path_to_docs_file + 'edited_file.png', 'PNG')
 
                     result_filename = full_name + ".pdf"
 
                     # Convert .png to .pdf
-                    img = Image.open("edited_file.png")
-                    img.save(result_filename)
+                    img = Image.open(path_to_docs_file + "edited_file.png")
+                    img.save(path_to_docs_file + result_filename)
 
                     # Send modified file to the user
-                    with open(result_filename, "rb") as f:
+                    with open(path_to_docs_file + result_filename, "rb") as f:
                         bot.send_document(user_id, f)
                         logging.info(f"Send digital file to user @{bot.get_chat(user_id).username}")
 
                     count_average_time(isDigital, int(time.time() - start_time))
+                    users_manager.increment(user_id, "digital", "approved")
                     bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
                                           text=call.message.text.split("\n\n", 1)[1] + "\n\n✅ Выполнено")
                     bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
                 else:
                     bot.send_message(user_id, "Уже печатаем справку. Сообщим, как только она будет готова 👌")
                     result_filename = "НА ПЕЧАТЬ - " + full_name + ".pdf"
-                    os.rename("edited_file.pdf", result_filename)
-                    with open(result_filename, "rb") as f:
+                    os.rename(path_to_docs_file + "edited_file.pdf", path_to_docs_file + result_filename)
+                    with open(path_to_docs_file + result_filename, "rb") as f:
                         bot.send_document(PRINTER_CHAT_ID, f,
                                           caption=call.message.text,
                                           reply_markup=telebot.types.InlineKeyboardMarkup().add(
@@ -283,13 +244,14 @@ while True:
                         logging.info(f"Send file to printer")
 
                     bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
-                                          text=call.message.text.split("\n\n", 1)[1] + "\n\n🧑‍💻 Согласовано, но пока не напечатано")
+                                          text=call.message.text.split("\n\n", 1)[
+                                                   1] + "\n\n🧑‍💻 Согласовано, но пока не напечатано")
 
                 # Сlean up after ourselves
-                os.remove(result_filename)
+                os.remove(path_to_docs_file + result_filename)
 
             elif call.data == "Printed":
-                user_id = call.message.caption.split('\n')[0].split(' ')[0]
+                user_id = int(call.message.caption.split('\n')[0].split(' ')[0])
                 start_time = int(call.message.caption.split('\n')[0].split(' ')[1])
                 id_of_message_in_channel = call.message.caption.split('\n')[0].split(' ')[2]
 
@@ -301,6 +263,7 @@ while True:
                 logging.info("Send notification to user @" + bot.get_chat(user_id).username)
 
                 count_average_time(False, int(time.time() - start_time))
+                users_manager.increment(user_id, "paper", "approved")
                 bot.edit_message_text(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel,
                                       text=call.message.caption.split("\n\n", 1)[1] + "\n\n✅ Выполнено")
                 bot.delete_message(chat_id=CHANNEL_ID, message_id=id_of_message_in_channel)
