@@ -27,12 +27,15 @@ def contact_handler(message):
             users_manager.add_new_user(user_id, message.from_user.username, message.contact.phone_number)
             bot.send_message(message.chat.id, "✅ Теперь вы авторизованы, можете продолжить использование бота.",
                              reply_markup=telebot.types.ReplyKeyboardRemove())
+            logging.info(f"User @{message.from_user.username} complete authorization with phone-number {message.contact.phone_number}")
         else:
             bot.send_sticker(message.chat.id,
                              "CAACAgIAAxkBAAEKtrdlTJWVLWbM59-4Qbz5OlSnCDoYFQACjDkAAkmraUr9LAf5qT-zIzME")  # из пацанов
             bot.reply_to(message, "Номер телефона не соответствует вашему аккаунту.")
+            logging.info(f"User @{message.from_user.username} tried to fool authorization with someone's else phone-number {message.contact.phone_number}")
     else:
         bot.send_message(message.chat.id, "Не удалось получить номер телефона.")
+        logging.info(f"Unnable to get phone number from user @{message.from_user.username}")
 
 
 def is_authorized(message):
@@ -52,9 +55,11 @@ def check_message(func):
     def wrapper(*args, **kwargs):
         message = args[0]
         if not is_authorized(message):
+            logging.info(f"Message from non-authorized user @{message.from_user.username}")
             bot.send_message(message.chat.id,
                              "Вы не авторизованы для использования этого бота. Чтобы авторизоваться — /authorize"
-                             "\n\nБез авторизации работает — @mp3_2_voice_bot"
+                             "\n\nИли напишите в @mgdocs_support_bot, откуда вы знали об этом боте"
+                             # "\n\nБез авторизации работает — @mp3_2_voice_bot"
                              )
             return
         if is_blocked(message):
